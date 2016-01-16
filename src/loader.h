@@ -1,10 +1,10 @@
 #ifndef LOADER_H
 #define LOADER_H
 
-#include "../../libwiiu/src/types.h"
-#include "../../libwiiu/src/coreinit.h"
-#include "../../libwiiu/src/socket.h"
-#include "../../libwiiu/src/draw.h"
+#include "../../../libwiiu/src/types.h"
+#include "../../../libwiiu/src/coreinit.h"
+#include "../../../libwiiu/src/socket.h"
+#include "../../../libwiiu/src/draw.h"
 
 /* Wait times for CPU0 and CPU2 */
 #define CPU0_WAIT_TIME		80
