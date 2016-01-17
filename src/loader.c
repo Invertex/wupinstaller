@@ -371,49 +371,39 @@ after_exploit: ;
 	printOSScreenMsg("Modded by Kakkoii, use at your own risk!", 3);
 
 
-  // This is the largest function that's probably no use (1084 bytes)
-
-/*	uint32_t oslogreport;  //Disabled these since the compiler throws an error about their void** conditional. I don't know enough about C to make these work or if he's using a different compiling method than the ksploit, since there is no MAKE file included.
-	int err = OSDynLoad_FindExport( coreinit_handle, 0, "OSLogReport", (void**)&oslogreport );
+	// This is the largest function that's probably no use (1084 bytes)
+	//To be able to compile this, you must open up 'libwiiu/src/coreinit.h' and change 'OSDynLoad_FindExport ((void(*)(uint32_t handle, int isdata, char *symbol, void *address))0x102b790)' to 'OSDynLoad_FindExport ((int(*)(uint32_t handle, bool isdata, const char *symbol, void *address))0x102b790)'
+	uint32_t oslogreport;
+	int err = OSDynLoad_FindExport(coreinit_handle, 0, "OSLogReport", (void**)&oslogreport);
 	uint32_t hook;
-	err += OSDynLoad_FindExport( coreinit_handle, 0, "OSRestoreInterrupts", (void**)&hook );
+	err += OSDynLoad_FindExport(coreinit_handle, 0, "OSRestoreInterrupts", (void**)&hook);
 	uint32_t OSGetPFID;
-	err += OSDynLoad_FindExport( coreinit_handle, 0, "OSGetPFID", (void**)&OSGetPFID );
+	err += OSDynLoad_FindExport(coreinit_handle, 0, "OSGetPFID", (void**)&OSGetPFID);
 	uint32_t iosopen;
-	err += OSDynLoad_FindExport( coreinit_handle, 0, "IOS_Open", (void**)&iosopen );
+	err += OSDynLoad_FindExport(coreinit_handle, 0, "IOS_Open", (void**)&iosopen);
 	uint32_t mpinfo;
-	err += OSDynLoad_FindExport( coreinit_handle, 0, "MCP_InstallGetInfo", (void**)&mpinfo );
+	err += OSDynLoad_FindExport(coreinit_handle, 0, "MCP_InstallGetInfo", (void**)&mpinfo);
 	uint32_t mpinstall;
-	err += OSDynLoad_FindExport( coreinit_handle, 0, "MCP_InstallTitleAsync", (void**)&mpinstall );
+	err += OSDynLoad_FindExport(coreinit_handle, 0, "MCP_InstallTitleAsync", (void**)&mpinstall);
 	uint32_t mpistatus;
-	err += OSDynLoad_FindExport( coreinit_handle, 0, "MCP_InstallGetProgress", (void**)&mpistatus );
+	err += OSDynLoad_FindExport(coreinit_handle, 0, "MCP_InstallGetProgress", (void**)&mpistatus);
 	uint32_t mperror;
-	err += OSDynLoad_FindExport( coreinit_handle, 0, "MCP_GetLastRawError", (void**)&mperror );
+	err += OSDynLoad_FindExport(coreinit_handle, 0, "MCP_GetLastRawError", (void**)&mperror);
 	uint32_t alloc;
-	err += OSDynLoad_FindExport( coreinit_handle, 0, "OSAllocFromSystem", (void**)&alloc );
+	err += OSDynLoad_FindExport(coreinit_handle, 0, "OSAllocFromSystem", (void**)&alloc);
 	uint32_t spf;
-	err += OSDynLoad_FindExport( coreinit_handle, 0, "__os_snprintf", (void**)&spf );
+	err += OSDynLoad_FindExport(coreinit_handle, 0, "__os_snprintf", (void**)&spf);
 	uint32_t osfatal;
-	err += OSDynLoad_FindExport( coreinit_handle, 0, "OSFatal", (void**)&osfatal );
-  if(err)
-  {
-    OSFatal("Failed to find an export");
-  }
-*/
-//Do the operations that the previous conditionals would have done so the rest of the code will at least function. There just won't be an exception thrown if the required information is not found.
-	uint32_t oslogreport, hook, OSGetPFID, iosopen, mpinfo, mpinstall, mpistatus, mperror, alloc, spf, osfatal;
-	OSDynLoad_FindExport(coreinit_handle, 0, "OSLogReport", (void**)&oslogreport);
-	OSDynLoad_FindExport(coreinit_handle, 0, "OSRestoreInterrupts", (void**)&hook);
-	OSDynLoad_FindExport(coreinit_handle, 0, "OSGetPFID", (void**)&OSGetPFID);
-	OSDynLoad_FindExport(coreinit_handle, 0, "IOS_Open", (void**)&iosopen);
-	OSDynLoad_FindExport(coreinit_handle, 0, "MCP_InstallGetInfo", (void**)&mpinfo);
-	OSDynLoad_FindExport(coreinit_handle, 0, "MCP_InstallTitleAsync", (void**)&mpinstall);
-	OSDynLoad_FindExport(coreinit_handle, 0, "MCP_InstallGetProgress", (void**)&mpistatus);
-	OSDynLoad_FindExport(coreinit_handle, 0, "MCP_GetLastRawError", (void**)&mperror);
-	OSDynLoad_FindExport(coreinit_handle, 0, "OSAllocFromSystem", (void**)&alloc);
-	OSDynLoad_FindExport(coreinit_handle, 0, "__os_snprintf", (void**)&spf);
-	OSDynLoad_FindExport(coreinit_handle, 0, "OSFatal", (void**)&osfatal);
-	wait(0x1FFFFFFF); 
+	err += OSDynLoad_FindExport(coreinit_handle, 0, "OSFatal", (void**)&osfatal);
+
+	if (err)
+	{
+		//OSFatal("Failed to find an export");
+		printOSScreenMsg("Failed to find an export, exiting to browser.", 4);
+		wait(0x2FFFFFFF);
+		callSysExit(coreinit_handle, SYSSwitchToBrowser);
+		exitOSScreen(coreinit_handle);
+	}
 
   uint32_t base_addr = oslogreport;
 
@@ -506,7 +496,7 @@ after_exploit: ;
   printOSScreenMsg("*Click the 'Wii U Menu' button after this screen to start it.", 5);
   wait(0x1FFFFFFF);
   printOSScreenMsg("*Don't touch console for 25min or more, depending on install size!", 6);
-  wait(0x7FFFFFFF);
+  wait(0x5FFFFFFF);
   callSysExit(coreinit_handle, SYSSwitchToMainApp);
   exitOSScreen(coreinit_handle);
 
