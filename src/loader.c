@@ -1,6 +1,5 @@
 
 #include "loader.h"
-
 //comment out the line below for loadiine-style memory mapping
 //#define LOADIINE_MEM_MAP 1
 
@@ -356,149 +355,163 @@ void _start()
 
 	printOSScreenMsg("Success! Restarting browser...", 2);
 	printOSScreenMsg("Launch this exploit again to run WUPinstaller!", 3);
-	wait(0x3FFFFFFF);
+	wait(0x7FFFFFFF);
 	callSysExit(coreinit_handle, SYSSwitchToBrowser);
 	exitOSScreen(coreinit_handle);
 
-
-after_exploit:;
+after_exploit: ;
 
 #include "..\mcppatch.h"
 
-	//Some on-screen messsage  to inform users better
+//Some on-screen messsage  to inform users better
 	printOSScreenMsg("Exploit already enabled!", 1);
 	wait(0x1FFFFFFF);
 	printOSScreenMsg("Starting WUPinstaller injection...", 2);
 	wait(0x1FFFFFFF);
+	printOSScreenMsg("Modded by Kakkoii, use at your own risk!", 3);
 
 
-	// This is the largest function that's probably no use (1084 bytes)
-	//To be able to compile this, you must open up 'libwiiu/src/coreinit.h' and change 'OSDynLoad_FindExport ((void(*)(uint32_t handle, int isdata, char *symbol, void *address))0x102b790)' to 'OSDynLoad_FindExport ((int(*)(uint32_t handle, bool isdata, const char *symbol, void *address))0x102b790)'
-	uint32_t oslogreport;
-	int err = OSDynLoad_FindExport(coreinit_handle, 0, "OSLogReport", (void**)&oslogreport);
+  // This is the largest function that's probably no use (1084 bytes)
+
+/*	uint32_t oslogreport;  //Disabled these since the compiler throws an error about their void** conditional. I don't know enough about C to make these work or if he's using a different compiling method than the ksploit, since there is no MAKE file included.
+	int err = OSDynLoad_FindExport( coreinit_handle, 0, "OSLogReport", (void**)&oslogreport );
 	uint32_t hook;
-	err += OSDynLoad_FindExport(coreinit_handle, 0, "OSRestoreInterrupts", (void**)&hook);
+	err += OSDynLoad_FindExport( coreinit_handle, 0, "OSRestoreInterrupts", (void**)&hook );
 	uint32_t OSGetPFID;
-	err += OSDynLoad_FindExport(coreinit_handle, 0, "OSGetPFID", (void**)&OSGetPFID);
+	err += OSDynLoad_FindExport( coreinit_handle, 0, "OSGetPFID", (void**)&OSGetPFID );
 	uint32_t iosopen;
-	err += OSDynLoad_FindExport(coreinit_handle, 0, "IOS_Open", (void**)&iosopen);
+	err += OSDynLoad_FindExport( coreinit_handle, 0, "IOS_Open", (void**)&iosopen );
 	uint32_t mpinfo;
-	err += OSDynLoad_FindExport(coreinit_handle, 0, "MCP_InstallGetInfo", (void**)&mpinfo);
+	err += OSDynLoad_FindExport( coreinit_handle, 0, "MCP_InstallGetInfo", (void**)&mpinfo );
 	uint32_t mpinstall;
-	err += OSDynLoad_FindExport(coreinit_handle, 0, "MCP_InstallTitleAsync", (void**)&mpinstall);
+	err += OSDynLoad_FindExport( coreinit_handle, 0, "MCP_InstallTitleAsync", (void**)&mpinstall );
 	uint32_t mpistatus;
-	err += OSDynLoad_FindExport(coreinit_handle, 0, "MCP_InstallGetProgress", (void**)&mpistatus);
+	err += OSDynLoad_FindExport( coreinit_handle, 0, "MCP_InstallGetProgress", (void**)&mpistatus );
 	uint32_t mperror;
-	err += OSDynLoad_FindExport(coreinit_handle, 0, "MCP_GetLastRawError", (void**)&mperror);
+	err += OSDynLoad_FindExport( coreinit_handle, 0, "MCP_GetLastRawError", (void**)&mperror );
 	uint32_t alloc;
-	err += OSDynLoad_FindExport(coreinit_handle, 0, "OSAllocFromSystem", (void**)&alloc);
+	err += OSDynLoad_FindExport( coreinit_handle, 0, "OSAllocFromSystem", (void**)&alloc );
 	uint32_t spf;
-	err += OSDynLoad_FindExport(coreinit_handle, 0, "__os_snprintf", (void**)&spf);
+	err += OSDynLoad_FindExport( coreinit_handle, 0, "__os_snprintf", (void**)&spf );
 	uint32_t osfatal;
-	err += OSDynLoad_FindExport(coreinit_handle, 0, "OSFatal", (void**)&osfatal);
+	err += OSDynLoad_FindExport( coreinit_handle, 0, "OSFatal", (void**)&osfatal );
+  if(err)
+  {
+    OSFatal("Failed to find an export");
+  }
+*/
+//Do the operations that the previous conditionals would have done so the rest of the code will at least function. There just won't be an exception thrown if the required information is not found.
+	uint32_t oslogreport, hook, OSGetPFID, iosopen, mpinfo, mpinstall, mpistatus, mperror, alloc, spf, osfatal;
+	OSDynLoad_FindExport(coreinit_handle, 0, "OSLogReport", (void**)&oslogreport);
+	OSDynLoad_FindExport(coreinit_handle, 0, "OSRestoreInterrupts", (void**)&hook);
+	OSDynLoad_FindExport(coreinit_handle, 0, "OSGetPFID", (void**)&OSGetPFID);
+	OSDynLoad_FindExport(coreinit_handle, 0, "IOS_Open", (void**)&iosopen);
+	OSDynLoad_FindExport(coreinit_handle, 0, "MCP_InstallGetInfo", (void**)&mpinfo);
+	OSDynLoad_FindExport(coreinit_handle, 0, "MCP_InstallTitleAsync", (void**)&mpinstall);
+	OSDynLoad_FindExport(coreinit_handle, 0, "MCP_InstallGetProgress", (void**)&mpistatus);
+	OSDynLoad_FindExport(coreinit_handle, 0, "MCP_GetLastRawError", (void**)&mperror);
+	OSDynLoad_FindExport(coreinit_handle, 0, "OSAllocFromSystem", (void**)&alloc);
+	OSDynLoad_FindExport(coreinit_handle, 0, "__os_snprintf", (void**)&spf);
+	OSDynLoad_FindExport(coreinit_handle, 0, "OSFatal", (void**)&osfatal);
+	wait(0x1FFFFFFF); 
 
-	if (err)
-	{
-		//OSFatal("Failed to find an export");
-		printOSScreenMsg("Failed to find an export, exiting to browser.", 4);
-		wait(0x2FFFFFFF);
-		callSysExit(coreinit_handle, SYSSwitchToBrowser);
-		exitOSScreen(coreinit_handle);
-	}
+  uint32_t base_addr = oslogreport;
 
-	uint32_t base_addr = oslogreport;
+  //Find BLR
+  while(1)
+  {
+    if( *(vu32*)ADR(hook) == 0x4E800020 )
+      break;
+    hook = hook + 4;
+  }
+  //OSReport("BLR:%08X\n", hook );
 
-	//Find BLR
-	while (1)
-	{
-		if (*(vu32*)ADR(hook) == 0x4E800020)
-			break;
-		hook = hook + 4;
-	}
-	//OSReport("BLR:%08X\n", hook );
+  //Patch function to always return gracefully
+  *(vu32*)(ADR(base_addr+0x2C)) = 0x4800002C;
+  base_addr += 0x70;
+    
+  u32 dev_str = base_addr;
+  u32 ins_str = base_addr+0x10;
+  u32 suc_str = base_addr+0x30;
+  u32 err_str = base_addr+0x40;
 
-	//Patch function to always return gracefully
-	*(vu32*)(ADR(base_addr + 0x2C)) = 0x4800002C;
-	base_addr += 0x70;
+  u32 flag_adr = (u32)OSAllocFromSystem( 4, 32 );
 
-	u32 dev_str = base_addr;
-	u32 ins_str = base_addr + 0x10;
-	u32 suc_str = base_addr + 0x30;
-	u32 err_str = base_addr + 0x40;
+  memcpy( (void*)ADR(dev_str), "/dev/mcp", 9 );
+  memcpy( (void*)ADR(ins_str), "/vol/app_sd/install", 20 );
+  //memcpy( (void*)ADR(suc_str), "Install OK.", 12 ); Disable this since it's not going to work properly when the error checking isn't working either. No use in bloating code.
+  //memcpy( (void*)ADR(err_str), "Error:0x%08X", 13 ); Disable this, as this is part of the functions that aren't mapped correctly for 5.4, activates before a large file can install.
 
-	u32 flag_adr = (u32)OSAllocFromSystem(4, 32);
+  *(vu32*)(flag_adr) = 3;
 
-	memcpy((void*)ADR(dev_str), "/dev/mcp", 9);
-	memcpy((void*)ADR(ins_str), "/vol/app_sd/install", 20);
-	memcpy( (void*)ADR(suc_str), "Install OK.", 12 ); 
-	memcpy( (void*)ADR(err_str), "Error:0x%08X", 13 );
+  base_addr += 0x50;
+   
+  //char error[256];
+  //__os_snprintf( error, sizeof(error), "%08X,%08X,%08X,%08X,%08X,%08X,%08X\nBase:%08X\nflag:%08X\nfa:%08X\nfunc:%p",
+  //                                      oslogreport,hook,OSGetPFID,iosopen,mpinstall,mpistatus,alloc,
+  //                                      base_addr, flag_adr, ADR(flag_adr), (void*)asm_patch );
+  //OSFatal(error);
+   
+  //Our code
+  memcpy( (void*)ADR(base_addr), (void*)mcppatch, sizeof(mcppatch) );
+    
+  //Flag address
+  *(vu32*)ADR(base_addr+0x28) =  0x3C600000 | ((flag_adr)>>16);
+  *(vu32*)ADR(base_addr+0x2C) =  0x38630000 | ((flag_adr)&0xFFFF);
 
-	*(vu32*)(flag_adr) = 3;
+  //dev str address
+  *(vu32*)ADR(base_addr+0x44) =  0x3C600000 | (dev_str>>16);
+  *(vu32*)ADR(base_addr+0x48) =  0x38630000 | (dev_str&0xFFFF);
 
-	base_addr += 0x50;
+  //path str address
+  *(vu32*)ADR(base_addr+0x70) =  0x3C800000 | (ins_str>>16);
+  *(vu32*)ADR(base_addr+0x74) =  0x38840000 | (ins_str&0xFFFF);
 
-	//char error[256];
-	//__os_snprintf( error, sizeof(error), "%08X,%08X,%08X,%08X,%08X,%08X,%08X\nBase:%08X\nflag:%08X\nfa:%08X\nfunc:%p",
-	//                                      oslogreport,hook,OSGetPFID,iosopen,mpinstall,mpistatus,alloc,
-	//                                      base_addr, flag_adr, ADR(flag_adr), (void*)asm_patch );
-	//OSFatal(error);
+  *(vu32*)ADR(base_addr+0xC4) =  0x3C800000 | (ins_str>>16);
+  *(vu32*)ADR(base_addr+0xC8) =  0x38840000 | (ins_str&0xFFFF);
 
-	//Our code
-	memcpy((void*)ADR(base_addr), (void*)mcppatch, sizeof(mcppatch));
+/*  //Related to the previous Error and Success methods we disabled above, so should be disabled too.
+  //err str address, r5
+  *(vu32*)ADR(base_addr+0x128) =  0x3CA00000 | (err_str>>16);
+  *(vu32*)ADR(base_addr+0x12C) =  0x38A50000 | (err_str&0xFFFF);
 
-	//Flag address
-	*(vu32*)ADR(base_addr + 0x28) = 0x3C600000 | ((flag_adr) >> 16);
-	*(vu32*)ADR(base_addr + 0x2C) = 0x38630000 | ((flag_adr)& 0xFFFF);
+  //suc str address, r3
+  *(vu32*)ADR(base_addr+0x10C) =  0x3C600000 | (suc_str>>16);
+  *(vu32*)ADR(base_addr+0x110) =  0x38630000 | (suc_str&0xFFFF);
+*/      
+  //functions
+  *(vu32*)ADR(base_addr+0x1C) = PatchBL( OSGetPFID, base_addr+0x1C );
+  *(vu32*)ADR(base_addr+0x50) = PatchBL( iosopen, base_addr+0x50 );
+  *(vu32*)ADR(base_addr+0x60) = PatchBL( alloc, base_addr+0x60 );
+  *(vu32*)ADR(base_addr+0x78) = PatchBL( mpinfo, base_addr+0x78 );
+  *(vu32*)ADR(base_addr+0xCC) = PatchBL( mpinstall, base_addr+0xCC );
+  *(vu32*)ADR(base_addr+0xE8) = PatchBL( mpistatus, base_addr+0xE8 );
+  *(vu32*)ADR(base_addr+0x100)= PatchBL( mperror,  base_addr+0x100 );
+  *(vu32*)ADR(base_addr+0x118)= PatchBL( mperror,  base_addr+0x118 );
+  *(vu32*)ADR(base_addr+0x130)= PatchBL( spf,  base_addr+0x130 );
+  *(vu32*)ADR(base_addr+0x138)= PatchBL( osfatal, base_addr+0x138 );
 
-	//dev str address
-	*(vu32*)ADR(base_addr + 0x44) = 0x3C600000 | (dev_str >> 16);
-	*(vu32*)ADR(base_addr + 0x48) = 0x38630000 | (dev_str & 0xFFFF);
+  DCFlushRange( (void*)ADR(oslogreport), 0x300 );
+  ICInvalidateRange( (void*)ADR(oslogreport), 0x300 );
 
-	//path str address
-	*(vu32*)ADR(base_addr + 0x70) = 0x3C800000 | (ins_str >> 16);
-	*(vu32*)ADR(base_addr + 0x74) = 0x38840000 | (ins_str & 0xFFFF);
+  //Install hook
+  *(vu32*)ADR(hook) = PatchB( base_addr, hook );
 
-	*(vu32*)ADR(base_addr + 0xC4) = 0x3C800000 | (ins_str >> 16);
-	*(vu32*)ADR(base_addr + 0xC8) = 0x38840000 | (ins_str & 0xFFFF);
+  DCFlushRange( (void*)ADR(hook), 0x20 );
+  ICInvalidateRange( (void*)ADR(hook), 0x20 );
 
-	//err str address, r5
-	*(vu32*)ADR(base_addr+0x128) =  0x3CA00000 | (err_str>>16);
-	*(vu32*)ADR(base_addr+0x12C) =  0x38A50000 | (err_str&0xFFFF);
-	//suc str address, r3
-	*(vu32*)ADR(base_addr+0x10C) =  0x3C600000 | (suc_str>>16);
-	*(vu32*)ADR(base_addr+0x110) =  0x38630000 | (suc_str&0xFFFF);
-	
-	//functions
-	*(vu32*)ADR(base_addr + 0x1C) = PatchBL(OSGetPFID, base_addr + 0x1C);
-	*(vu32*)ADR(base_addr + 0x50) = PatchBL(iosopen, base_addr + 0x50);
-	*(vu32*)ADR(base_addr + 0x60) = PatchBL(alloc, base_addr + 0x60);
-	*(vu32*)ADR(base_addr + 0x78) = PatchBL(mpinfo, base_addr + 0x78);
-	*(vu32*)ADR(base_addr + 0xCC) = PatchBL(mpinstall, base_addr + 0xCC);
-	*(vu32*)ADR(base_addr + 0xE8) = PatchBL(mpistatus, base_addr + 0xE8);
-	*(vu32*)ADR(base_addr + 0x100) = PatchBL(mperror, base_addr + 0x100);
-	*(vu32*)ADR(base_addr + 0x118) = PatchBL(mperror, base_addr + 0x118);
-	*(vu32*)ADR(base_addr + 0x130) = PatchBL(spf, base_addr + 0x130);
-	*(vu32*)ADR(base_addr + 0x138) = PatchBL(osfatal, base_addr + 0x138);
+//Controlled exit with some feedback for the user and some waiting to give the system some time to process
+  printOSScreenMsg("Exiting out to OS to begin install...", 4);
+  wait(0x1FFFFFFF);
+  printOSScreenMsg("*Click the 'Wii U Menu' button after this screen to start it.", 5);
+  wait(0x1FFFFFFF);
+  printOSScreenMsg("*Don't touch console for 25min or more, depending on install size!", 6);
+  wait(0x7FFFFFFF);
+  callSysExit(coreinit_handle, SYSSwitchToMainApp);
+  exitOSScreen(coreinit_handle);
 
-	DCFlushRange((void*)ADR(oslogreport), 0x300);
-	ICInvalidateRange((void*)ADR(oslogreport), 0x300);
-
-	//Install hook
-	*(vu32*)ADR(hook) = PatchB(base_addr, hook);
-
-	DCFlushRange((void*)ADR(hook), 0x20);
-	ICInvalidateRange((void*)ADR(hook), 0x20);
-
-	//Controlled exit with some feedback for the user and some waiting to give the system some time to process
-	printOSScreenMsg("Exiting out to OS to begin install...", 4);
-	wait(0x1FFFFFFF);
-	printOSScreenMsg("*DON'T TOUCH console for 25min or more, depending on install size!", 5);
-	wait(0x4FFFFFFF);
-	callSysExit(coreinit_handle, SYSSwitchToMainApp); //Exit to main app to initiate the install without having to press a button. As pressing a button on 5.4 will cause the error to be pushed
-	exitOSScreen(coreinit_handle);
+  //_Exit();
 }
-
-
 //Simple wait() method
 void wait(unsigned int t)
 {
